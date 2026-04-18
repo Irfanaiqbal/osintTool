@@ -701,7 +701,7 @@ HTML = r"""<!doctype html>
         <span class="logo-ver">v3.0</span>
       </div>
       <nav class="hnav">
-        <a href="mailto:support@shadowtrace.com" class="nbtn"><i class="fas fa-envelope"></i> Contact</a>
+        <a href="mailto:shadowtrace5@proton.me" class="nbtn"><i class="fas fa-envelope"></i> Contact</a>
         <button class="nbtn donate" onclick="openM('donate')"><i class="fas fa-heart"></i> Donate</button>
       </nav>
       <button class="hburger" onclick="toggleMob()"><i class="fas fa-bars"></i></button>
