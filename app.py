@@ -700,7 +700,7 @@ HTML = r"""<!doctype html>
       <div class="logo">
         <div class="logo-icon"><i class="fas fa-crosshairs"></i></div>
         <span class="logo-name">SHADOWTRACE</span>
-        <span class="logo-ver">v3.0</span>
+        <span class="logo-ver">beta</span>
       </div>
       <nav class="hnav">
         <a href="mailto:shadowtrace5@proton.me" class="nbtn"><i class="fas fa-envelope"></i> Contact</a>
@@ -899,14 +899,14 @@ HTML = r"""<!doctype html>
         <div class="ccard">
           <div class="ccard-icon btc"><i class="fab fa-bitcoin"></i></div>
           <h3 class="btc">Bitcoin</h3>
-          <div class="wallet" id="btcAddr">bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh</div>
+          <div class="wallet" id="btcAddr">bc1qzpsqrjp5kuax6n6q0uuatkmeacc82rp8sfur7l</div>
           <button class="cbtn" onclick="copyWallet('btcAddr','btcOk')"><i class="fas fa-copy"></i> COPY</button>
           <div class="copied" id="btcOk">✓ Copied!</div>
         </div>
         <div class="ccard">
           <div class="ccard-icon eth"><i class="fab fa-ethereum"></i></div>
           <h3 class="eth">Ethereum</h3>
-          <div class="wallet" id="ethAddr">0x742d35Cc6634C0532925a3b844Bc9eC8c2F5e3B6</div>
+          <div class="wallet" id="ethAddr">0x70e93cab6cc9a7c6c7f68662bfd2ca160d3afa3d</div>
           <button class="cbtn" onclick="copyWallet('ethAddr','ethOk')"><i class="fas fa-copy"></i> COPY</button>
           <div class="copied" id="ethOk">✓ Copied!</div>
         </div>
