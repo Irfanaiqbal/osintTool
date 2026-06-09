@@ -1,7 +1,0 @@
-flask
-requests
-python-whois
-phonenumbers
-dnspython
-gunicorn
-holehe
