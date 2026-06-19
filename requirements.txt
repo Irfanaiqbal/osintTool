@@ -5,3 +5,4 @@ phonenumbers
 dnspython
 gunicorn
 holehe
+sherlock-project
