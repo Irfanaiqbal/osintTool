@@ -9,7 +9,7 @@ import json
 import sqlite3
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('ADMIN_SECRET_KEY', 'change-this-secret-key-in-production-please')
+app.secret_key = os.environ.get('ADMIN_SECRET_KEY', 'unshakable-nothing-going-to-happen-here')
 
 # ============================================================
 #  DATABASE — request logging (completely hidden from public)
@@ -66,7 +66,7 @@ db_init()
 #  ADMIN CREDENTIALS — change these or use env vars
 # ============================================================
 ADMIN_USERNAME = os.environ.get('ADMIN_USER', 'haleema')
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASS', 'haleema@321')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASS', 'halee@321')
 # Hidden admin panel URL segment — not linked anywhere on the site
 ADMIN_PREFIX    = os.environ.get('ADMIN_PREFIX', 'x7k9m-panel')
 
@@ -121,55 +121,15 @@ def validate_target(mode, target):
     return True, target
 
 # ============================================================
-#  USERNAME PLATFORMS
+#  SHERLOCK — username OSINT via Sherlock process
+#  Rate-limit: only MAX_SHERLOCK_CONCURRENT processes at once
+#  to avoid OOM / crash on the server.
 # ============================================================
-USERNAME_PLATFORMS = {
-    "GitHub":         "https://github.com/{u}",
-    "GitLab":         "https://gitlab.com/{u}",
-    "Bitbucket":      "https://bitbucket.org/{u}",
-    "SourceForge":    "https://sourceforge.net/u/{u}",
-    "Gitea":          "https://gitea.com/{u}",
-    "CodePen":        "https://codepen.io/{u}",
-    "Replit":         "https://replit.com/@{u}",
-    "Kaggle":         "https://www.kaggle.com/{u}",
-    "HackerRank":     "https://www.hackerrank.com/{u}",
-    "LeetCode":       "https://leetcode.com/{u}",
-    "Twitter / X":    "https://twitter.com/{u}",
-    "Instagram":      "https://www.instagram.com/{u}/",
-    "Facebook":       "https://www.facebook.com/{u}",
-    "Reddit":         "https://www.reddit.com/user/{u}/",
-    "TikTok":         "https://www.tiktok.com/@{u}",
-    "Threads":        "https://www.threads.net/@{u}",
-    "Pinterest":      "https://www.pinterest.com/{u}/",
-    "Tumblr":         "https://{u}.tumblr.com",
-    "Snapchat":       "https://www.snapchat.com/add/{u}",
-    "Telegram":       "https://t.me/{u}",
-    "Discord":        "https://discord.com/users/{u}",
-    "Matrix":         "https://matrix.to/#/@{u}:matrix.org",
-    "YouTube":        "https://www.youtube.com/@{u}",
-    "Twitch":         "https://www.twitch.tv/{u}",
-    "Vimeo":          "https://vimeo.com/{u}",
-    "SoundCloud":     "https://soundcloud.com/{u}",
-    "Mixcloud":       "https://www.mixcloud.com/{u}",
-    "Bandcamp":       "https://bandcamp.com/{u}",
-    "DeviantArt":     "https://www.deviantart.com/{u}",
-    "Behance":        "https://www.behance.net/{u}",
-    "Dribbble":       "https://dribbble.com/{u}",
-    "Medium":         "https://medium.com/@{u}",
-    "Substack":       "https://{u}.substack.com",
-    "Stack Overflow": "https://stackoverflow.com/users/{u}",
-    "Quora":          "https://www.quora.com/profile/{u}",
-    "Steam":          "https://steamcommunity.com/id/{u}",
-    "Epic Games":     "https://www.epicgames.com/id/{u}",
-    "Roblox":         "https://www.roblox.com/user.aspx?username={u}",
-    "Fiverr":         "https://www.fiverr.com/{u}",
-    "Upwork":         "https://www.upwork.com/freelancers/{u}",
-    "LinkedIn":       "https://www.linkedin.com/in/{u}",
-    "Pastebin":       "https://pastebin.com/u/{u}",
-    "Keybase":        "https://keybase.io/{u}",
-    "About.me":       "https://about.me/{u}",
-    "ProductHunt":    "https://www.producthunt.com/@{u}",
-}
+MAX_SHERLOCK_CONCURRENT = 2          # max parallel sherlock processes
+SHERLOCK_TIMEOUT        = 180        # seconds before we kill a stuck sherlock
+sherlock_semaphore      = threading.Semaphore(MAX_SHERLOCK_CONCURRENT)
+sherlock_queue_lock     = threading.Lock()
+sherlock_queue_count    = [0]        # waiters
 
 jobs = {}
 
@@ -736,7 +696,7 @@ HTML = r"""<!doctype html>
     <div class="modal-hd"><h2>USAGE GUIDE</h2><button class="modal-x" onclick="closeM('guide')">&times;</button></div>
     <div class="modal-body">
       <div class="msec"><h3>Email</h3><p>Uses Holehe to check whether an email is registered on popular services. Returns confirmed registrations only.</p></div>
-      <div class="msec"><h3>Username</h3><p>Probes 40+ platforms for username existence via HTTP checks. Click a result card to open the profile directly.</p></div>
+      <div class="msec"><h3>Username</h3><p>Runs Sherlock to search 300+ platforms for the username. Results stream in live as Sherlock finds accounts. Click any card to open the profile. Scans are queued server-side (max 2 concurrent) to prevent crashes — you may wait briefly if others are scanning.</p></div>
       <div class="msec"><h3>Domain</h3><p>Performs WHOIS lookup, DNS enumeration (A, AAAA, MX, NS, TXT, CAA), IP resolution, web server fingerprinting, and TLS certificate inspection.</p></div>
       <div class="msec"><h3>Phone</h3><p>Validates and formats the number, identifies carrier and geographic region, timezone, number type, and provides quick links to WhatsApp, Telegram, and Google.</p></div>
       <div class="msec"><h3>Keyboard Shortcuts</h3>
@@ -1426,20 +1386,86 @@ def start():
                                    icon='fa-exclamation-triangle', tag='email'))
 
             elif mode_v == 'username':
-                for name, url_tpl in USERNAME_PLATFORMS.items():
+                # ── Sherlock OSINT ──────────────────────────────────────
+                # Acquire semaphore so we never run more than
+                # MAX_SHERLOCK_CONCURRENT sherlock processes at once.
+                with sherlock_queue_lock:
+                    sherlock_queue_count[0] += 1
+                    waiters = sherlock_queue_count[0]
+
+                if not sherlock_semaphore.acquire(timeout=SHERLOCK_TIMEOUT):
+                    q.put(make_card('Sherlock Queue Timeout',
+                                   'Too many concurrent username scans. Try again shortly.',
+                                   icon='fa-clock', tag='username'))
+                else:
                     try:
-                        u = url_tpl.format(u=target)
-                        r = requests.get(u, timeout=5, allow_redirects=True,
-                                         headers={'User-Agent': 'Mozilla/5.0'})
-                        if r.status_code == 200 and len(r.content) > 500:
-                            q.put(make_card(name,
-                                           f'<a href="{u}" target="_blank">{u}</a>',
-                                           body_plain=u,
-                                           icon='fa-external-link-alt',
-                                           tag='username', url=u))
-                            result_counter[0] += 1
-                    except Exception:
-                        pass
+                        q.put(make_card('Sherlock OSINT',
+                                       'Scanning 300+ platforms via Sherlock… results stream as found.',
+                                       icon='fa-satellite-dish', tag='username'))
+                        result_counter[0] += 1
+
+                        proc = subprocess.Popen(
+                            ['sherlock', target,
+                             '--print-found',    # only found accounts
+                             '--no-color',       # clean output
+                             '--timeout', '10'], # per-site timeout
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True
+                        )
+
+                        found_count = 0
+                        try:
+                            for raw_line in proc.stdout:
+                                line = raw_line.strip()
+                                if not line:
+                                    continue
+                                # Sherlock prints found lines like:
+                                # [+] SiteName: https://...
+                                if line.startswith('[+]'):
+                                    rest = line[3:].strip()
+                                    if ': ' in rest:
+                                        site, url = rest.split(': ', 1)
+                                        site = site.strip()
+                                        url  = url.strip()
+                                    else:
+                                        site = rest
+                                        url  = ''
+                                    link_html = (f'<a href="{url}" target="_blank">'
+                                                 f'{url}</a>') if url else site
+                                    q.put(make_card(
+                                        site, link_html,
+                                        body_plain=url or site,
+                                        icon='fa-external-link-alt',
+                                        tag='username', url=url
+                                    ))
+                                    result_counter[0] += 1
+                                    found_count += 1
+
+                            proc.wait(timeout=SHERLOCK_TIMEOUT)
+
+                        except subprocess.TimeoutExpired:
+                            proc.kill()
+                            q.put(make_card('Sherlock Timeout',
+                                           'Scan took too long and was terminated.',
+                                           icon='fa-exclamation-triangle', tag='username'))
+
+                        if found_count == 0:
+                            q.put(make_card('No Results',
+                                           f'Sherlock found no accounts for "{target}".',
+                                           icon='fa-user-slash', tag='username'))
+
+                    except FileNotFoundError:
+                        q.put(make_card('Sherlock Not Found',
+                                       'Install Sherlock: pip install sherlock-project',
+                                       icon='fa-exclamation-circle', tag='username'))
+                    except Exception as e:
+                        q.put(make_card('Sherlock Error', str(e)[:120],
+                                       icon='fa-exclamation-circle', tag='username'))
+                    finally:
+                        sherlock_semaphore.release()
+                        with sherlock_queue_lock:
+                            sherlock_queue_count[0] -= 1
 
             elif mode_v == 'domain':
                 # WHOIS
