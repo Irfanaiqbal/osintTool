@@ -9,7 +9,7 @@ import json
 import sqlite3
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('ADMIN_SECRET_KEY', 'change-this-secret-key-in-production-please')
+app.secret_key = os.environ.get('ADMIN_SECRET_KEY', 'please-man-348hf8348s-dont-hackme-324rnfsnsi-thisisonlymyproject-jdf94jsd94-leavemealone')
 
 # ============================================================
 #  DATABASE — request logging (completely hidden from public)
@@ -35,8 +35,60 @@ def db_init():
         ip  TEXT NOT NULL,
         msg TEXT
     )''')
+    cur.execute('''CREATE TABLE IF NOT EXISTS notices (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        heading    TEXT    NOT NULL,
+        content    TEXT    NOT NULL,
+        link_url   TEXT,
+        color_key  TEXT    DEFAULT 'cyan',
+        active     INTEGER DEFAULT 1,
+        created_at TEXT    NOT NULL
+    )''')
     con.commit()
     con.close()
+
+# ============================================================
+#  NOTICE BOARD — admin-controlled banners on public page
+# ============================================================
+NOTICE_COLORS = {
+    'cyan':   {'label': 'Cyan',   'hex': '#00e5ff', 'bg': 'rgba(0,229,255,.10)',  'glow': 'rgba(0,229,255,.25)'},
+    'purple': {'label': 'Purple', 'hex': '#9b5de5', 'bg': 'rgba(155,93,229,.10)', 'glow': 'rgba(155,93,229,.25)'},
+    'green':  {'label': 'Green',  'hex': '#00f5a0', 'bg': 'rgba(0,245,160,.10)',  'glow': 'rgba(0,245,160,.22)'},
+    'pink':   {'label': 'Pink',   'hex': '#ff4d8f', 'bg': 'rgba(255,77,143,.10)', 'glow': 'rgba(255,77,143,.24)'},
+    'yellow': {'label': 'Yellow', 'hex': '#ffd166', 'bg': 'rgba(255,209,102,.10)','glow': 'rgba(255,209,102,.22)'},
+    'orange': {'label': 'Orange', 'hex': '#ff9a3c', 'bg': 'rgba(255,154,60,.10)', 'glow': 'rgba(255,154,60,.22)'},
+    'blue':   {'label': 'Blue',   'hex': '#4488ff', 'bg': 'rgba(68,136,255,.10)', 'glow': 'rgba(68,136,255,.24)'},
+    'red':    {'label': 'Red',    'hex': '#ff4455', 'bg': 'rgba(255,68,85,.10)',  'glow': 'rgba(255,68,85,.24)'},
+}
+
+def _notice_color(key):
+    return NOTICE_COLORS.get(key, NOTICE_COLORS['cyan'])
+
+def get_active_notices():
+    con = sqlite3.connect(DB_PATH)
+    rows = con.execute(
+        'SELECT id,heading,content,link_url,color_key FROM notices WHERE active=1 ORDER BY id DESC'
+    ).fetchall()
+    con.close()
+    out = []
+    for r in rows:
+        c = _notice_color(r[4])
+        out.append({'id': r[0], 'heading': r[1], 'content': r[2], 'link_url': r[3],
+                    'hex': c['hex'], 'bg': c['bg'], 'glow': c['glow']})
+    return out
+
+def get_all_notices():
+    con = sqlite3.connect(DB_PATH)
+    rows = con.execute(
+        'SELECT id,heading,content,link_url,color_key,active,created_at FROM notices ORDER BY id DESC'
+    ).fetchall()
+    con.close()
+    out = []
+    for r in rows:
+        c = _notice_color(r[4])
+        out.append({'id': r[0], 'heading': r[1], 'content': r[2], 'link_url': r[3] or '',
+                    'color_key': r[4], 'hex': c['hex'], 'active': r[5], 'created_at': r[6]})
+    return out
 
 def db_log_scan(ip, mode, target, ua, result_ct=0):
     try:
@@ -65,10 +117,10 @@ db_init()
 # ============================================================
 #  ADMIN CREDENTIALS — change these or use env vars
 # ============================================================
-ADMIN_USERNAME = os.environ.get('ADMIN_USER', 'haleema')
+ADMIN_USERNAME = os.environ.get('ADMIN_USER', 'haleema5')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASS', 'halee@321')
 # Hidden admin panel URL segment — not linked anywhere on the site
-ADMIN_PREFIX    = os.environ.get('ADMIN_PREFIX', 'x7k9m-panel')
+ADMIN_PREFIX    = os.environ.get('ADMIN_PREFIX', 'h7k9n-panel')
 
 # ============================================================
 #  RATE LIMITING
@@ -312,6 +364,30 @@ HTML = r"""<!doctype html>
     .mob-item:hover{border-color:var(--c);color:var(--fg);transform:translateX(-4px)}
     .mob-item.donate i{color:var(--pk)}
     .mob-item.donate:hover{border-color:var(--pk)}
+
+    /* ── NOTICE BOARD ── */
+    .notice-stack{display:flex;flex-direction:column;gap:10px;padding-top:22px}
+    .notice-item{
+      position:relative;border:1px solid var(--nc);background:var(--nbg);
+      border-radius:12px;padding:14px 46px 14px 16px;
+      box-shadow:0 0 16px var(--nglow);animation:noticeIn .35s ease;
+    }
+    .notice-head{
+      display:flex;align-items:center;gap:8px;
+      font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;
+      color:var(--nc);letter-spacing:.02em;margin-bottom:5px;
+    }
+    .notice-body{font-size:13.5px;color:var(--fg2);line-height:1.6;white-space:pre-line}
+    .notice-body a{color:var(--nc);text-decoration:none;font-weight:600;border-bottom:1px dashed var(--nc)}
+    .notice-body a:hover{opacity:.8}
+    .notice-close{
+      position:absolute;top:10px;right:10px;width:26px;height:26px;border-radius:7px;
+      border:1px solid var(--border);background:var(--bg3);color:var(--fg2);
+      display:flex;align-items:center;justify-content:center;cursor:pointer;
+      transition:all .2s;font-size:12px;
+    }
+    .notice-close:hover{border-color:var(--nc);color:var(--nc)}
+    @keyframes noticeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 
     /* ── HERO ── */
     .hero{padding:52px 0 36px;text-align:center}
@@ -597,6 +673,18 @@ HTML = r"""<!doctype html>
 
 <main>
   <div class="wrap">
+
+    {% if notices %}
+    <div class="notice-stack">
+      {% for n in notices %}
+      <div class="notice-item" style="--nc:{{ n.hex }};--nbg:{{ n.bg }};--nglow:{{ n.glow }}">
+        <button class="notice-close" onclick="this.parentElement.remove()" title="Dismiss"><i class="fas fa-times"></i></button>
+        <div class="notice-head"><i class="fas fa-thumbtack"></i> {{ n.heading }}</div>
+        <div class="notice-body">{{ n.content }}{% if n.link_url %} — <a href="{{ n.link_url }}" target="_blank" rel="noopener noreferrer">Learn more <i class="fas fa-arrow-right"></i></a>{% endif %}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
 
     <div class="hero">
       <div class="hero-eye"><i class="fas fa-satellite-dish"></i> PASSIVE RECONNAISSANCE PLATFORM</div>
@@ -1142,6 +1230,31 @@ ADMIN_HTML = r"""<!doctype html>
     .tbl-empty{text-align:center;padding:48px 20px;color:var(--fg3);font-family:'Space Mono',monospace;font-size:13px}
 
     .text-right{text-align:right}
+
+    /* NOTICE MANAGER */
+    .notice-form{background:var(--bg2);border:1px solid var(--b);border-radius:14px;padding:22px;margin-bottom:22px}
+    .nf-title{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:var(--c);letter-spacing:.1em;margin-bottom:16px;text-transform:uppercase}
+    .nf-row{margin-bottom:14px}
+    .nf-row label{display:block;font-size:11px;font-weight:600;color:var(--fg3);letter-spacing:.08em;margin-bottom:7px;text-transform:uppercase}
+    .nf-row input[type=text],.nf-row textarea{width:100%;background:var(--bg3);border:1px solid var(--b);border-radius:9px;padding:11px 14px;font-size:13px;color:var(--fg);outline:none;transition:border-color .2s;font-family:'Space Grotesk',sans-serif;resize:vertical}
+    .nf-row input[type=text]:focus,.nf-row textarea:focus{border-color:var(--c)}
+    .nf-swatches{display:flex;gap:10px;flex-wrap:wrap}
+    .nf-swatch{width:34px;height:34px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .15s;position:relative}
+    .nf-swatch input{position:absolute;opacity:0;width:100%;height:100%;cursor:pointer;margin:0}
+    .nf-swatch.sel{border-color:var(--fg);transform:scale(1.12)}
+    .nf-actions{display:flex;gap:10px;align-items:center;margin-top:6px}
+    .nf-toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--fg2)}
+    .nf-submit{padding:11px 22px;border-radius:9px;font-size:13px;font-weight:700;background:linear-gradient(135deg,var(--c),var(--p));border:none;color:#000;cursor:pointer;font-family:'Space Mono',monospace;letter-spacing:.05em}
+    .nf-cancel{padding:11px 18px;border-radius:9px;font-size:13px;font-weight:600;background:var(--bg3);border:1px solid var(--b2);color:var(--fg2);cursor:pointer;display:none}
+    .n-color-dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:7px;vertical-align:middle}
+    .n-status{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:.05em}
+    .n-status.on{background:rgba(0,245,160,.12);border:1px solid rgba(0,245,160,.3);color:var(--g)}
+    .n-status.off{background:rgba(136,136,170,.1);border:1px solid var(--b2);color:var(--fg3)}
+    .n-actrow{display:flex;gap:8px}
+    .n-actbtn{padding:6px 12px;border-radius:7px;font-size:12px;font-weight:500;border:1px solid var(--b2);background:var(--bg3);color:var(--fg2);cursor:pointer;transition:all .2s;font-family:'Space Grotesk',sans-serif}
+    .n-actbtn:hover{border-color:var(--c);color:var(--fg)}
+    .n-actbtn.del:hover{border-color:var(--r);color:var(--r)}
+    .n-content-cell{max-width:320px;white-space:normal}
     @media(max-width:768px){th:nth-child(5),td:nth-child(5),th:nth-child(4),td:nth-child(4){display:none}}
     ::-webkit-scrollbar{width:5px}
     ::-webkit-scrollbar-track{background:var(--bg2)}
@@ -1220,6 +1333,9 @@ ADMIN_HTML = r"""<!doctype html>
     </button>
     <button class="sec-tab" onclick="showTab('ips')">
       <i class="fas fa-network-wired" style="margin-right:7px"></i>IP Summary
+    </button>
+    <button class="sec-tab" onclick="showTab('notices')">
+      <i class="fas fa-thumbtack" style="margin-right:7px"></i>Notice Board
     </button>
   </div>
 
@@ -1331,6 +1447,83 @@ ADMIN_HTML = r"""<!doctype html>
     </div>
   </div>
 
+  <!-- NOTICE BOARD -->
+  <div class="sec-panel" id="tab-notices">
+    <form class="notice-form" method="POST" action="{{ notice_action }}" id="noticeForm">
+      <div class="nf-title" id="nfFormTitle"><i class="fas fa-plus"></i> Add Notice</div>
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="id" id="nfId" value="">
+      <div class="nf-row">
+        <label>Heading</label>
+        <input type="text" name="heading" id="nfHeading" maxlength="120" placeholder="e.g. Scheduled maintenance" required>
+      </div>
+      <div class="nf-row">
+        <label>Content</label>
+        <textarea name="content" id="nfContent" rows="3" maxlength="600" placeholder="Notice message shown to visitors..." required></textarea>
+      </div>
+      <div class="nf-row">
+        <label>Link URL (optional)</label>
+        <input type="text" name="link_url" id="nfLink" maxlength="300" placeholder="https://example.com">
+      </div>
+      <div class="nf-row">
+        <label>Color</label>
+        <div class="nf-swatches" id="nfSwatches">
+          {% for key, c in notice_colors.items() %}
+          <label class="nf-swatch{{ ' sel' if key=='cyan' else '' }}" style="background:{{ c.hex }}" data-key="{{ key }}">
+            <input type="radio" name="color_key" value="{{ key }}" {{ 'checked' if key=='cyan' else '' }} onchange="selSwatch(this)">
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="nf-actions">
+        <label class="nf-toggle"><input type="checkbox" name="active" value="1" checked> Active (visible on site)</label>
+      </div>
+      <div class="nf-actions" style="margin-top:14px">
+        <button type="submit" class="nf-submit" id="nfSubmit"><i class="fas fa-check"></i> Publish Notice</button>
+        <button type="button" class="nf-cancel" id="nfCancel" onclick="resetNoticeForm()">Cancel Edit</button>
+      </div>
+    </form>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>COLOR</th>
+            <th>HEADING</th>
+            <th>CONTENT</th>
+            <th>LINK</th>
+            <th>STATUS</th>
+            <th>CREATED (UTC)</th>
+            <th class="text-right">ACTIONS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for n in all_notices %}
+          <tr>
+            <td style="color:var(--fg3);font-family:'Space Mono',monospace;font-size:11px">{{ n.id }}</td>
+            <td><span class="n-color-dot" style="background:{{ n.hex }}"></span>{{ n.color_key }}</td>
+            <td style="color:var(--fg);font-weight:600">{{ n.heading }}</td>
+            <td class="n-content-cell">{{ n.content[:90] }}{{ '...' if n.content|length > 90 else '' }}</td>
+            <td>{% if n.link_url %}<i class="fas fa-link" style="color:var(--c)"></i>{% else %}—{% endif %}</td>
+            <td><span class="n-status {{ 'on' if n.active else 'off' }}">{{ 'ACTIVE' if n.active else 'HIDDEN' }}</span></td>
+            <td class="ts-cell">{{ n.created_at[:19].replace('T',' ') }}</td>
+            <td class="text-right">
+              <div class="n-actrow" style="justify-content:flex-end">
+                <button class="n-actbtn" onclick='editNotice({{ n.id }}, {{ n.heading|tojson }}, {{ n.content|tojson }}, {{ n.link_url|tojson }}, {{ n.color_key|tojson }}, {{ n.active|tojson }})'><i class="fas fa-pen"></i></button>
+                <a class="n-actbtn" href="{{ notice_toggle_url }}{{ n.id }}"><i class="fas fa-power-off"></i></a>
+                <button class="n-actbtn del" onclick="confirmDeleteNotice({{ n.id }})"><i class="fas fa-trash"></i></button>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" class="tbl-empty">No notices yet. Create one above.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
 </div><!-- /wrap -->
 
 <script>
@@ -1338,7 +1531,8 @@ function showTab(name) {
   document.querySelectorAll('.sec-panel').forEach(p=>p.classList.remove('show'));
   document.querySelectorAll('.sec-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('show');
-  event.currentTarget.classList.add('active');
+  if (event && event.currentTarget) event.currentTarget.classList.add('active');
+  else document.querySelectorAll('.sec-tab')[['scans','blocks','ips','notices'].indexOf(name)].classList.add('active');
 }
 function filterScans() {
   const q = document.getElementById('scanSearch').value.toLowerCase();
@@ -1351,6 +1545,50 @@ function confirmClear(tbl) {
     window.location.href = '?clear='+tbl;
   }
 }
+
+/* ── NOTICE BOARD ── */
+function selSwatch(input) {
+  document.querySelectorAll('.nf-swatch').forEach(s=>s.classList.remove('sel'));
+  input.closest('.nf-swatch').classList.add('sel');
+}
+function editNotice(id, heading, content, link, colorKey, active) {
+  document.getElementById('nfFormTitle').innerHTML = '<i class="fas fa-pen"></i> Edit Notice #'+id;
+  document.getElementById('nfId').value = id;
+  document.getElementById('nfHeading').value = heading;
+  document.getElementById('nfContent').value = content;
+  document.getElementById('nfLink').value = link || '';
+  document.querySelector('input[name="active"]').checked = !!active;
+  document.querySelectorAll('.nf-swatch').forEach(s=>{
+    const on = s.dataset.key === colorKey;
+    s.classList.toggle('sel', on);
+    s.querySelector('input').checked = on;
+  });
+  document.getElementById('nfSubmit').innerHTML = '<i class="fas fa-check"></i> Update Notice';
+  document.getElementById('nfCancel').style.display = 'inline-block';
+  document.getElementById('noticeForm').scrollIntoView({behavior:'smooth', block:'start'});
+}
+function resetNoticeForm() {
+  document.getElementById('noticeForm').reset();
+  document.getElementById('nfId').value = '';
+  document.getElementById('nfFormTitle').innerHTML = '<i class="fas fa-plus"></i> Add Notice';
+  document.getElementById('nfSubmit').innerHTML = '<i class="fas fa-check"></i> Publish Notice';
+  document.getElementById('nfCancel').style.display = 'none';
+  document.querySelectorAll('.nf-swatch').forEach(s=>s.classList.toggle('sel', s.dataset.key==='cyan'));
+}
+function confirmDeleteNotice(id) {
+  if (confirm('Delete this notice permanently?')) {
+    window.location.href = '{{ notice_delete_url }}'+id;
+  }
+}
+(function(){
+  const tab = new URLSearchParams(window.location.search).get('tab');
+  if (tab === 'notices') {
+    document.querySelectorAll('.sec-panel').forEach(p=>p.classList.remove('show'));
+    document.querySelectorAll('.sec-tab').forEach(t=>t.classList.remove('active'));
+    document.getElementById('tab-notices').classList.add('show');
+    document.querySelectorAll('.sec-tab')[3].classList.add('active');
+  }
+})();
 </script>
 {% endif %}
 </body>
@@ -1369,7 +1607,7 @@ def sec_headers(r):
 
 @app.route('/')
 def index():
-    return render_template_string(HTML)
+    return render_template_string(HTML, notices=get_active_notices())
 
 @app.route('/start', methods=['POST'])
 def start():
@@ -1795,8 +2033,66 @@ def admin_panel():
         stats=_admin_stats(),
         scans=_admin_scans(),
         blocks=_admin_blocks(),
-        ip_summary=_admin_ip_summary()
+        ip_summary=_admin_ip_summary(),
+        all_notices=get_all_notices(),
+        notice_colors=NOTICE_COLORS,
+        notice_action=f'/{ADMIN_PREFIX}/notice/save',
+        notice_toggle_url=f'/{ADMIN_PREFIX}/notice/toggle/',
+        notice_delete_url=f'/{ADMIN_PREFIX}/notice/delete/'
     )
+
+
+@app.route(f'/{ADMIN_PREFIX}/notice/save', methods=['POST'])
+def admin_notice_save():
+    if not session.get('admin_ok'):
+        return redirect(f'/{ADMIN_PREFIX}')
+    if not hmac.compare_digest(request.form.get('csrf', ''), _get_csrf()):
+        return redirect(f'/{ADMIN_PREFIX}?tab=notices')
+
+    nid     = request.form.get('id', '').strip()
+    heading = request.form.get('heading', '').strip()[:120]
+    content = request.form.get('content', '').strip()[:600]
+    link    = request.form.get('link_url', '').strip()[:300]
+    if link and not re.match(r'^https?://', link, re.I):
+        link = ''  # reject unsafe / non-http(s) link schemes
+    color_key = request.form.get('color_key', 'cyan')
+    if color_key not in NOTICE_COLORS:
+        color_key = 'cyan'
+    active = 1 if request.form.get('active') == '1' else 0
+
+    if heading and content:
+        con = sqlite3.connect(DB_PATH)
+        if nid.isdigit():
+            con.execute('UPDATE notices SET heading=?,content=?,link_url=?,color_key=?,active=? WHERE id=?',
+                        (heading, content, link, color_key, active, nid))
+        else:
+            con.execute('INSERT INTO notices (heading,content,link_url,color_key,active,created_at) VALUES (?,?,?,?,?,?)',
+                        (heading, content, link, color_key, active, datetime.datetime.utcnow().isoformat()))
+        con.commit()
+        con.close()
+    return redirect(f'/{ADMIN_PREFIX}?tab=notices')
+
+
+@app.route(f'/{ADMIN_PREFIX}/notice/toggle/<int:nid>')
+def admin_notice_toggle(nid):
+    if not session.get('admin_ok'):
+        return redirect(f'/{ADMIN_PREFIX}')
+    con = sqlite3.connect(DB_PATH)
+    con.execute('UPDATE notices SET active = 1-active WHERE id=?', (nid,))
+    con.commit()
+    con.close()
+    return redirect(f'/{ADMIN_PREFIX}?tab=notices')
+
+
+@app.route(f'/{ADMIN_PREFIX}/notice/delete/<int:nid>')
+def admin_notice_delete(nid):
+    if not session.get('admin_ok'):
+        return redirect(f'/{ADMIN_PREFIX}')
+    con = sqlite3.connect(DB_PATH)
+    con.execute('DELETE FROM notices WHERE id=?', (nid,))
+    con.commit()
+    con.close()
+    return redirect(f'/{ADMIN_PREFIX}?tab=notices')
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
