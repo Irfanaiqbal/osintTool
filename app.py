@@ -248,6 +248,7 @@ HTML = r"""<!doctype html>
   <title>SHADOWTRACE · OSINT INTELLIGENCE</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Passive OSINT reconnaissance platform for digital footprint analysis.">
+  <meta name="google-site-verification" content="cAERLLgc3YqtAX3tfCG1WODbXhVFf3Nm_22BKOt3i6E" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
